@@ -16,6 +16,12 @@ struct sensor_data {
   long altitude;
   int siv;
   int force;
+  long gps_xang_rate;
+  long gps_yang_rate;
+  long gps_zang_rate;
+  long gps_xaccel;
+  long gps_yaccel;
+  long gps_zaccel;
 };
 
 
@@ -151,7 +157,7 @@ void setup() {
       ;
   }
 
-  myGNSS.setI2COutput(COM_TYPE_UBX | COM_TYPE_NMEA);  //Set the I2C port to output both NMEA and UBX messages
+  myGNSS.setI2COutput(COM_TYPE_UBX);                  //Set the I2C port to output both NMEA and UBX messages
   myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);  //Save (only) the communications port settings to flash and BBR
 
   //This will pipe all NMEA sentences to the serial port so we can see them
@@ -160,6 +166,8 @@ void setup() {
 
 
 void getdata_GPS() {
+  
+
   long latitude = myGNSS.getLatitude();
   Serial.print(F("Lat: "));
   Serial.print(latitude);
@@ -189,13 +197,15 @@ void displaysensor_data() {
   Serial.print(">>sns dat:");
   Serial.print(millis());
   Serial.print(":"),
-  Serial.print(sensor.accel_X);
+    Serial.print(sensor.accel_X);
   Serial.print(":");
   Serial.print(sensor.accel_Y);
   Serial.print(":");
   Serial.print(sensor.accel_Z);
   Serial.print(":");
   Serial.print(sensor.gyro_X);
+  Serial.print(":");
+  Serial.print(sensor.gyro_Y);
   Serial.print(":");
   Serial.print(sensor.gyro_Z);
   Serial.print(":");
@@ -231,7 +241,7 @@ void loop() {
     getdata_GPS();
   }
 
-  if (millis() - lastTime_IMU > 100) {  //100 msec for IMU update
+  if (millis() - lastTime_IMU > 10) {  //100 msec for IMU update
     lastTime_IMU = millis();            //Update the timer
     Serial.println("loop IMU");
     getdata_IMU();
@@ -241,5 +251,5 @@ void loop() {
     displaysensor_data();
   }
 
-  delay(10);  //Don't pound too hard on the I2C bus
+  delay(1);  //Don't pound too hard on the I2C bus
 }
