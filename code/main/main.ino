@@ -1,4 +1,11 @@
-#include <Wire.h>  //Needed for I2C to GNSS
+#include <Wire.h>                             //Needed for I2C to GNSS
+#include "SparkFun_BNO08x_Arduino_Library.h"  // Click here to get the library: http://librarymanager/All#SparkFun_BNO080
+#include <Preferences.h>
+#include <ezButton.h>
+#include <SPI.h>
+#include <SD.h>
+
+#define DEBUG_ON
 
 struct sensor_data {
   float accel_X;
@@ -22,136 +29,124 @@ struct sensor_data {
   long gps_xaccel;
   long gps_yaccel;
   long gps_zaccel;
+  unsigned long time_gps;
+  unsigned long time_imu;
+  unsigned long time_pressure;
 };
 
-
+File myFile;
 sensor_data sensor;
-
-#define SDA_IMU 5
-#define SCL_IMU 6
+Preferences preferences;
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>  //Click here to get the library: http://librarymanager/All#SparkFun_u-blox_GNSS
-#include "src/FastIMU.h"
 SFE_UBLOX_GNSS myGNSS;
-
-
-#define IMU_ADDRESS 0x68  //Change to the address of the IMU
-MPU6500 IMU;              //Change to the name of any supported IMU! , better upgrade to compass based sensor
-
-
-calData calib = { 0 };  //Calibration data
-AccelData accelData;    //Sensor data
-GyroData gyroData;
-MagData magData;
-
-
-void calibrate_IMU() {
-  Serial.println("FastIMU calibration & data example");
-  if (IMU.hasMagnetometer()) {
-    delay(1000);
-    Serial.println("Move IMU in figure 8 pattern until done.");
-    delay(3000);
-    IMU.calibrateMag(&calib);
-    Serial.println("Magnetic calibration done!");
-  } else {
-    delay(5000);
-  }
-
-  delay(5000);
-  Serial.println("Keep IMU level.");
-  delay(5000);
-  IMU.calibrateAccelGyro(&calib);
-  Serial.println("Calibration done!");
-  Serial.println("Accel biases X/Y/Z: ");
-  Serial.print(calib.accelBias[0]);
-  Serial.print(", ");
-  Serial.print(calib.accelBias[1]);
-  Serial.print(", ");
-  Serial.println(calib.accelBias[2]);
-  Serial.println("Gyro biases X/Y/Z: ");
-  Serial.print(calib.gyroBias[0]);
-  Serial.print(", ");
-  Serial.print(calib.gyroBias[1]);
-  Serial.print(", ");
-  Serial.println(calib.gyroBias[2]);
-  if (IMU.hasMagnetometer()) {
-    Serial.println("Mag biases X/Y/Z: ");
-    Serial.print(calib.magBias[0]);
-    Serial.print(", ");
-    Serial.print(calib.magBias[1]);
-    Serial.print(", ");
-    Serial.println(calib.magBias[2]);
-    Serial.println("Mag Scale X/Y/Z: ");
-    Serial.print(calib.magScale[0]);
-    Serial.print(", ");
-    Serial.print(calib.magScale[1]);
-    Serial.print(", ");
-    Serial.println(calib.magScale[2]);
-  }
-  delay(5000);
-  IMU.init(calib, IMU_ADDRESS);
-}
-
-void getdata_IMU() {
-  IMU.update();
-  IMU.getAccel(&accelData);
-  Serial.print(accelData.accelX);
-  Serial.print("\t");
-  Serial.print(accelData.accelY);
-  Serial.print("\t");
-  Serial.print(accelData.accelZ);
-  Serial.print("\t");
-  IMU.getGyro(&gyroData);
-  Serial.print(gyroData.gyroX);
-  Serial.print("\t");
-  Serial.print(gyroData.gyroY);
-  Serial.print("\t");
-  Serial.print(gyroData.gyroZ);
-  if (IMU.hasMagnetometer()) {
-    IMU.getMag(&magData);
-    Serial.print("\t");
-    Serial.print(magData.magX);
-    Serial.print("\t");
-    Serial.print(magData.magY);
-    Serial.print("\t");
-    Serial.print(magData.magZ);
-  }
-  if (IMU.hasTemperature()) {
-    Serial.print("\t");
-    Serial.println(IMU.getTemp());
-    sensor.temp = IMU.getTemp();
-  } else {
-    Serial.println();
-  }
-  sensor.accel_X = accelData.accelX;
-  sensor.accel_Y = accelData.accelY;
-  sensor.accel_Z = accelData.accelZ;
-  sensor.gyro_X = gyroData.gyroX;
-  sensor.gyro_Y = gyroData.gyroY;
-  sensor.gyro_Z = gyroData.gyroZ;
-}
+unsigned int file_counter = 0;
+bool measuring_state = false;
 
 #define PRESSURE_SENSOR_PIN A1
+#define BNO08X_INT 10
+#define BNO08X_RST 9
+
+
+#define BNO08X_ADDR 0x4A
+#define SCL_EXTRA 6
+#define SDA_EXTRA 5
+#define CALBUTTON A4
+#define MEASBUTTON A3
+
+#define SCK_CARD A5
+
+ezButton calbutton(CALBUTTON);    // create ezButton object that attach to pin 7;
+ezButton measbutton(MEASBUTTON);  // create ezButton object that attach to pin 7;
+BNO08x myIMU;
+
+void save_data_tofile() {
+  // if the file opened okay, write to it:
+  if (myFile) {
+    String message = String(millis()) + "," + String(sensor.time_imu) + "," + String(sensor.accel_X) + "," + String(sensor.accel_Y) + "," + String(sensor.accel_Z) + "," + String(sensor.gyro_X) + "," + String(sensor.gyro_Y) + "," + String(sensor.gyro_Z) + "," + String(sensor.mag_X) + "," + String(sensor.mag_Y) + "," + String(sensor.mag_Z) + "," + String(sensor.temp) + "," + String(sensor.time_gps) + "," + String(sensor.latitude) + "," + String(sensor.longitude) + "," + String(sensor.altitude) + "," + String(sensor.siv) + "," + String(sensor.time_pressure) + "," + String(sensor.force);
+    myFile.println(message);
+    myFile.flush();
+  }
+  // if the file didn't open, print an error:
+  else {
+    Serial.println("error opening file ");
+  }
+}
+
+void getdata_GPS(void* pvParameters) {
+  unsigned long lastTime_GPS = millis();
+  long latitude, longitude, altitude;
+  byte SIV;
+  SFE_UBLOX_GNSS* gnss = static_cast<SFE_UBLOX_GNSS*>(pvParameters);
+  while (1) {
+
+    if (measuring_state && (millis() - lastTime_GPS > 1000)) {  //1 sec for GPS update
+      lastTime_GPS = millis();                                  //Update the timer
+      latitude = gnss->getLatitude();
+      longitude = gnss->getLongitude();
+      altitude = gnss->getAltitude();
+      SIV = gnss->getSIV();
+      sensor.time_gps = millis();
+
+      sensor.latitude = latitude;
+      sensor.longitude = longitude;
+      sensor.altitude = altitude;
+      sensor.siv = SIV;
+    }
+    delay(10);
+  }
+}
+
+void setReports(void) {
+  Serial.println("Setting desired reports");
+  if (myIMU.enableMagnetometer() == true) {
+    Serial.println(F("Magnetometer enabled"));
+  } else {
+    Serial.println("Could not enable magnetometer");
+  }
+
+  if (myIMU.enableAccelerometer() == true) {
+    Serial.println(F("Accelerometer enabled"));
+  } else {
+    Serial.println("Could not enable Accelerometer");
+  }
+
+  if (myIMU.enableGyro() == true) {
+    Serial.println(F("Gyro enabled"));
+  } else {
+    Serial.println("Could not enable Gyro");
+  }
+}
 
 void setup() {
   Serial.begin(115200);
+  preferences.begin("trax", false);
+
+  while (!Serial) delay(10);  // Wait for Serial to become available.
   Serial.println("Starting surfsense");
   pinMode(PRESSURE_SENSOR_PIN, INPUT);
 
   Wire.begin();
-  Wire1.begin(SDA_IMU, SCL_IMU);
-  Wire1.setClock(400000);  //400khz clock
+  Wire1.begin(SDA_EXTRA, SCL_EXTRA);
 
-  int err = IMU.init(calib, IMU_ADDRESS);
-  if (err != 0) {
-    Serial.print("Error initializing IMU: ");
-    Serial.println(err);
-    while (true) {
-      ;
-    }
+  file_counter = preferences.getUInt("counter", 0);
+
+  if (!SD.begin(SCK_CARD)) {
+    Serial.println("initialization failed!");
+    return;
   }
 
-  if (myGNSS.begin() == false) {
+
+  if (myIMU.begin(BNO08X_ADDR, Wire1, BNO08X_INT, BNO08X_RST) == false) {
+    Serial.println("BNO08x not detected at default I2C address. Check your jumpers and the hookup guide. Freezing...");
+    while (1)
+      ;
+  }
+  Serial.println("BNO08x found!");
+
+  setReports();
+
+  if (myGNSS.begin(Wire) == false) {
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
     while (1)
       ;
@@ -162,94 +157,142 @@ void setup() {
 
   //This will pipe all NMEA sentences to the serial port so we can see them
   myGNSS.setNMEAOutputPort(Serial);
+
+  xTaskCreatePinnedToCore(
+    getdata_GPS,    // Function
+    "getdata_GPS",  // Name
+    5000,           // Stack size
+    &myGNSS,        // 👈 Pointer to pass
+    1,              // Priority
+    NULL,           // Task handle
+    0               // Core
+  );
 }
 
+void getdata_IMU() {
+  if (myIMU.getSensorEvent() == true) {
+    sensor.time_imu = millis();
 
-void getdata_GPS() {
-  
+    if (myIMU.getSensorEventID() == SENSOR_REPORTID_GYROSCOPE_CALIBRATED) {
+      sensor.gyro_X = myIMU.getGyroX();
+      sensor.gyro_Y = myIMU.getGyroY();
+      sensor.gyro_Z = myIMU.getGyroZ();
+    }
 
-  long latitude = myGNSS.getLatitude();
-  Serial.print(F("Lat: "));
-  Serial.print(latitude);
+    if (myIMU.getSensorEventID() == SENSOR_REPORTID_ACCELEROMETER) {
+      sensor.accel_X = myIMU.getAccelX();
+      sensor.accel_Y = myIMU.getAccelY();
+      sensor.accel_Z = myIMU.getAccelZ();
+    }
 
-  long longitude = myGNSS.getLongitude();
-  Serial.print(F(" Long: "));
-  Serial.print(longitude);
-  Serial.print(F(" (degrees * 10^-7)"));
-
-  long altitude = myGNSS.getAltitude();
-  Serial.print(F(" Alt: "));
-  Serial.print(altitude);
-  Serial.print(F(" (mm)"));
-
-  byte SIV = myGNSS.getSIV();
-  Serial.print(F(" SIV: "));
-  Serial.print(SIV);
-
-  Serial.println();
-  sensor.latitude = latitude;
-  sensor.longitude = longitude;
-  sensor.altitude = altitude;
-  sensor.siv = SIV;
+    if (myIMU.getSensorEventID() == SENSOR_REPORTID_MAGNETIC_FIELD) {
+      sensor.mag_X = myIMU.getMagX();
+      sensor.mag_Y = myIMU.getMagY();
+      sensor.mag_Z = myIMU.getMagZ();
+    }
+  }
 }
+
 
 void displaysensor_data() {
   Serial.print(">>sns dat:");
   Serial.print(millis());
-  Serial.print(":"),
-    Serial.print(sensor.accel_X);
-  Serial.print(":");
+  Serial.print(",IMU-ticks:");
+  Serial.print(sensor.time_imu);
+  Serial.print(",aX:");
+  Serial.print(sensor.accel_X);
+  Serial.print(",aY:");
   Serial.print(sensor.accel_Y);
-  Serial.print(":");
+  Serial.print(",aZ:");
   Serial.print(sensor.accel_Z);
-  Serial.print(":");
+  Serial.print(",gX:");
   Serial.print(sensor.gyro_X);
-  Serial.print(":");
+  Serial.print(",gY:");
   Serial.print(sensor.gyro_Y);
-  Serial.print(":");
+  Serial.print(",gZ:");
   Serial.print(sensor.gyro_Z);
-  Serial.print(":");
+  Serial.print(",mX:");
   Serial.print(sensor.mag_X);
-  Serial.print(":");
+  Serial.print(",mY:");
   Serial.print(sensor.mag_Y);
-  Serial.print(":");
+  Serial.print(",mZ:");
   Serial.print(sensor.mag_Z);
-  Serial.print(":");
+  Serial.print(",tX:");
   Serial.print(sensor.temp);
-  Serial.print(":");
+  Serial.print(",GPS-ticks:");
+  Serial.print(sensor.time_gps);
+  Serial.print(",lat:");
   Serial.print(sensor.latitude);
-  Serial.print(":");
+  Serial.print(",long:");
   Serial.print(sensor.longitude);
-  Serial.print(":");
+  Serial.print(",alt:");
   Serial.print(sensor.altitude);
-  Serial.print(":");
+  Serial.print(",siv:");
   Serial.print(sensor.siv);
-  Serial.print(":");
+  Serial.print(",pressure-ticks:");
+  Serial.print(sensor.time_pressure);
+  Serial.print(",force:");
   Serial.print(sensor.force);
   Serial.print("<<");
   Serial.println();
 }
 
 
-unsigned long lastTime_GPS, lastTime_IMU;
+unsigned long lastTime_IMU;
 
 void loop() {
+  calbutton.loop();
+  measbutton.loop();
 
-  if (millis() - lastTime_GPS > 1000) {  //1 sec for GPS update
-    lastTime_GPS = millis();             //Update the timer
-    Serial.println("loop GPS");
-    getdata_GPS();
+  if (calbutton.isPressed()) {
+    Serial.println("Calbutton is pressed");
+    if (myIMU.setCalibrationConfig(SH2_CAL_ACCEL || SH2_CAL_GYRO || SH2_CAL_MAG) == true) {
+      Serial.println(F("Calibration Command Sent Successfully"));
+    } else {
+      Serial.println(F("Could not send Calibration Command. Freezing..."));
+      while (1) delay(10);
+    }
+    //wait 10 seconds and save calibrated data to bno085 flash
+    delay(10000);
+    if (myIMU.saveCalibration() == true) {
+      Serial.println(F("Calibration data was saved successfully"));
+    } else {
+      Serial.println("Save Calibration Failure");
+    }
   }
 
-  if (millis() - lastTime_IMU > 10) {  //100 msec for IMU update
-    lastTime_IMU = millis();            //Update the timer
-    Serial.println("loop IMU");
-    getdata_IMU();
-    sensor.force = analogRead(PRESSURE_SENSOR_PIN);
-    Serial.println("Force Val:");
-    Serial.println(sensor.force);
-    displaysensor_data();
+  if (measbutton.isPressed()) {
+    Serial.println("Measbutton is pressed");
+    if (myFile) myFile.close();
+    if (!measuring_state) {
+      preferences.putUInt("counter", ++file_counter);
+      String filename = "/" + String(file_counter) + ".csv";
+      myFile = SD.open(filename, FILE_WRITE);
+      if (myFile) Serial.println("File opened for Writing");
+      myFile.println(F("timestamp,IMU-ticks,aX,aY,aZ,gX,gY,gZ,mX,mY,mZ,tX,GPS-ticks,lat,long,alt,siv,pressure-ticks,force1"));
+      measuring_state = true;
+    } else{
+      measuring_state = false;
+    }
   }
 
-  delay(1);  //Don't pound too hard on the I2C bus
+  if (measuring_state) {
+    if (myIMU.wasReset()) {
+      Serial.print("Sensor was reset");
+      setReports();
+    }
+
+    if (millis() - lastTime_IMU > 10) {  //100 msec for IMU update
+      lastTime_IMU = millis();           //Update the timer
+      getdata_IMU();
+      sensor.force = analogRead(PRESSURE_SENSOR_PIN);
+      sensor.time_pressure = millis();
+      save_data_tofile();
+#ifdef DEBUG_ON
+      displaysensor_data();
+#endif
+    }
+  }
+
+  delay(10);  //Don't pound too hard on the I2C bus
 }
