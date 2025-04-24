@@ -43,16 +43,18 @@ SFE_UBLOX_GNSS myGNSS;
 unsigned int file_counter = 0;
 bool measuring_state = false;
 
-#define PRESSURE_SENSOR_PIN A1
-#define BNO08X_INT 10
-#define BNO08X_RST 9
+#define PRESSURE_SENSOR_PIN A0
+#define BNO08X_INT 9
+#define BNO08X_RST 12
 
 
 #define BNO08X_ADDR 0x4A
 #define SCL_EXTRA 6
 #define SDA_EXTRA 5
-#define CALBUTTON A4
-#define MEASBUTTON A3
+#define CALBUTTON A1
+#define MEASBUTTON A2
+#define LED_RED 10
+#define LED_YELLOW 11
 
 #define SCK_CARD A5
 
