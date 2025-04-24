@@ -5,7 +5,7 @@
 #include <SPI.h>
 #include <SD.h>
 
-#define DEBUG_ON
+//#define DEBUG_ON
 
 struct sensor_data {
   float accel_X;
@@ -82,8 +82,8 @@ void getdata_GPS(void* pvParameters) {
   SFE_UBLOX_GNSS* gnss = static_cast<SFE_UBLOX_GNSS*>(pvParameters);
   while (1) {
 
-    if (measuring_state && (millis() - lastTime_GPS > 1000)) {  //1 sec for GPS update
-      lastTime_GPS = millis();                                  //Update the timer
+    if (measuring_state && (millis() - lastTime_GPS > (1000 / 5) ) && gnss->getPVT() ) {  //200 msec for GPS update
+      lastTime_GPS = millis();                                                        //Update the timer
       latitude = gnss->getLatitude();
       longitude = gnss->getLongitude();
       altitude = gnss->getAltitude();
@@ -94,6 +94,8 @@ void getdata_GPS(void* pvParameters) {
       sensor.longitude = longitude;
       sensor.altitude = altitude;
       sensor.siv = SIV;
+
+      gnss->flushPVT();
     }
     delay(10);
   }
@@ -123,8 +125,14 @@ void setReports(void) {
 void setup() {
   Serial.begin(115200);
   preferences.begin("trax", false);
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_YELLOW, OUTPUT);
 
-  while (!Serial) delay(10);  // Wait for Serial to become available.
+  digitalWrite(LED_RED, HIGH);
+  digitalWrite(LED_YELLOW, HIGH);
+
+
+   delay(1000);  // Wait for Serial to become available.
   Serial.println("Starting surfsense");
   pinMode(PRESSURE_SENSOR_PIN, INPUT);
 
@@ -154,11 +162,14 @@ void setup() {
       ;
   }
 
-  myGNSS.setI2COutput(COM_TYPE_UBX);                  //Set the I2C port to output both NMEA and UBX messages
-  myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);  //Save (only) the communications port settings to flash and BBR
+  myGNSS.setI2COutput(COM_TYPE_UBX);  //Set the I2C port to output both NMEA and UBX messages
+  //myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);  //Save (only) the communications port settings to flash and BBR
 
-  //This will pipe all NMEA sentences to the serial port so we can see them
-  myGNSS.setNMEAOutputPort(Serial);
+  myGNSS.setNavigationFrequency(5);
+
+  byte rate = myGNSS.getNavigationFrequency();  //Get the update rate of this module
+  Serial.print("Current update rate: ");
+  Serial.println(rate);
 
   xTaskCreatePinnedToCore(
     getdata_GPS,    // Function
@@ -169,6 +180,10 @@ void setup() {
     NULL,           // Task handle
     0               // Core
   );
+
+  delay(500);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_YELLOW, LOW);
 }
 
 void getdata_IMU() {
@@ -247,6 +262,7 @@ void loop() {
   measbutton.loop();
 
   if (calbutton.isPressed()) {
+    digitalWrite(LED_YELLOW, HIGH);
     Serial.println("Calbutton is pressed");
     if (myIMU.setCalibrationConfig(SH2_CAL_ACCEL || SH2_CAL_GYRO || SH2_CAL_MAG) == true) {
       Serial.println(F("Calibration Command Sent Successfully"));
@@ -261,19 +277,23 @@ void loop() {
     } else {
       Serial.println("Save Calibration Failure");
     }
+
+    digitalWrite(LED_YELLOW, LOW);
   }
 
   if (measbutton.isPressed()) {
     Serial.println("Measbutton is pressed");
     if (myFile) myFile.close();
     if (!measuring_state) {
+      digitalWrite(LED_RED, HIGH);
       preferences.putUInt("counter", ++file_counter);
-      String filename = "/" + String(file_counter) + ".csv";
+      String filename = "/trax_" + String(myGNSS.getYear()) + "_" + String(myGNSS.getMonth()) + "_" + String(myGNSS.getDay()) + "_" + String(myGNSS.getHour()) + "_" + String(myGNSS.getMinute()) + "_" + String(myGNSS.getSecond()) + "_#" + String(file_counter) + ".csv";
       myFile = SD.open(filename, FILE_WRITE);
       if (myFile) Serial.println("File opened for Writing");
       myFile.println(F("timestamp,IMU-ticks,aX,aY,aZ,gX,gY,gZ,mX,mY,mZ,tX,GPS-ticks,lat,long,alt,siv,pressure-ticks,force1"));
       measuring_state = true;
-    } else{
+    } else {
+      digitalWrite(LED_RED, LOW);
       measuring_state = false;
     }
   }
