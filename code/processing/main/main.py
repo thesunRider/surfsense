@@ -38,3 +38,5 @@ sc = ax.scatter(data['lat'], data['long'], c=colors, cmap='viridis', s=10)
 cbar = plt.colorbar(sc, ax=ax)
 cbar.set_label('GPS Ticks')
 plt.show()
+
+#, double vn,double ve,double vd,double lat,double lon,double alt,float p,float q,float r,float ax,float ay,float az,float hx,float hy, float hz

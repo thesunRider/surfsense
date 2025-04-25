@@ -29,6 +29,11 @@ struct sensor_data {
   long gps_xaccel;
   long gps_yaccel;
   long gps_zaccel;
+
+  long NedNorthVel, NedEastVel, NedDownVel, VerticalAccEst, HorizontalAccEst, SpeedAccEst, HeadingAccEst;
+  int headVeh, magDec, magAcc;
+
+
   unsigned long time_gps;
   unsigned long time_imu;
   unsigned long time_pressure;
@@ -65,9 +70,39 @@ BNO08x myIMU;
 void save_data_tofile() {
   // if the file opened okay, write to it:
   if (myFile) {
-    String message = String(millis()) + "," + String(sensor.time_imu) + "," + String(sensor.accel_X) + "," + String(sensor.accel_Y) + "," + String(sensor.accel_Z) + "," + String(sensor.gyro_X) + "," + String(sensor.gyro_Y) + "," + String(sensor.gyro_Z) + "," + String(sensor.mag_X) + "," + String(sensor.mag_Y) + "," + String(sensor.mag_Z) + "," + String(sensor.temp) + "," + String(sensor.time_gps) + "," + String(sensor.latitude) + "," + String(sensor.longitude) + "," + String(sensor.altitude) + "," + String(sensor.siv) + "," + String(sensor.time_pressure) + "," + String(sensor.force);
-    myFile.flush();
-    myFile.println(message);
+    //String message = String(millis()) + "," + String(sensor.time_imu) + "," + String(sensor.accel_X) + "," + String(sensor.accel_Y) + "," + String(sensor.accel_Z) + "," + String(sensor.gyro_X) + "," + String(sensor.gyro_Y) + "," + String(sensor.gyro_Z) + "," + String(sensor.mag_X) + "," + String(sensor.mag_Y) + "," + String(sensor.mag_Z) + "," + String(sensor.temp) + "," + String(sensor.time_gps) + "," + String(sensor.latitude) + "," + String(sensor.longitude) + "," + String(sensor.altitude) + "," + String(sensor.siv) + "," + String(sensor.time_pressure) + "," + String(sensor.force);
+    myFile.flush();  // this should be before writing so we can eliminate the possibility of waiting for any transfers to complete before the write happens
+    myFile.printf(
+      "%lu,%lu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.2f,%lu,%ld,%ld,%ld,%d,"
+      "%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d,%d,%lu,%d\n",
+
+      millis(),
+      sensor.time_imu,
+      sensor.accel_X, sensor.accel_Y, sensor.accel_Z,
+      sensor.gyro_X, sensor.gyro_Y, sensor.gyro_Z,
+      sensor.mag_X, sensor.mag_Y, sensor.mag_Z,
+      sensor.temp,
+      sensor.time_gps,
+      sensor.latitude,
+      sensor.longitude,
+      sensor.altitude,
+      sensor.siv,
+
+      sensor.NedNorthVel,
+      sensor.NedEastVel,
+      sensor.NedDownVel,
+      sensor.VerticalAccEst,
+      sensor.HorizontalAccEst,
+      sensor.SpeedAccEst,
+      sensor.HeadingAccEst,
+      sensor.headVeh,
+      sensor.magDec,
+      sensor.magAcc,
+
+      sensor.time_pressure,
+      sensor.force);
+
+    //myFile.println(message);
   }
   // if the file didn't open, print an error:
   else {
@@ -77,23 +112,50 @@ void save_data_tofile() {
 
 void getdata_GPS(void* pvParameters) {
   unsigned long lastTime_GPS = millis();
-  long latitude, longitude, altitude;
+  long latitude, longitude, altitude, NedNorthVel, NedEastVel, NedDownVel, VerticalAccEst, HorizontalAccEst, SpeedAccEst, HeadingAccEst;
+  int headVeh, magDec, magAcc;
   byte SIV;
   SFE_UBLOX_GNSS* gnss = static_cast<SFE_UBLOX_GNSS*>(pvParameters);
   while (1) {
 
-    if (measuring_state && (millis() - lastTime_GPS > 200 ) && gnss->getPVT() ) {  //200 msec for GPS update
-      lastTime_GPS = millis();                                                        //Update the timer
+    if (measuring_state && gnss->getPVT() && (gnss->getInvalidLlh() == false)) {  //200 msec for GPS update
+      lastTime_GPS = millis();                                                    //Update the timer
       latitude = gnss->getLatitude();
       longitude = gnss->getLongitude();
       altitude = gnss->getAltitude();
       SIV = gnss->getSIV();
+      NedNorthVel = gnss->getNedNorthVel();
+      NedEastVel = gnss->getNedEastVel();
+      NedDownVel = gnss->getNedDownVel();
+      VerticalAccEst = gnss->getVerticalAccEst();
+      HorizontalAccEst = gnss->getHorizontalAccEst();
+      SpeedAccEst = gnss->getSpeedAccEst();
+      HeadingAccEst = gnss->getHeadingAccEst();
+
+      if (gnss->getHeadVehValid() == true) {
+        headVeh = gnss->getHeadVeh();
+        magDec = gnss->getMagDec();
+        magAcc = gnss->getMagAcc();
+      }
+
       sensor.time_gps = millis();
 
       sensor.latitude = latitude;
       sensor.longitude = longitude;
       sensor.altitude = altitude;
       sensor.siv = SIV;
+
+      sensor.NedNorthVel = NedNorthVel;
+      sensor.NedEastVel = NedEastVel;
+      sensor.NedDownVel = NedDownVel;
+      sensor.VerticalAccEst = VerticalAccEst;
+      sensor.HorizontalAccEst = HorizontalAccEst;
+      sensor.SpeedAccEst = SpeedAccEst;
+      sensor.HeadingAccEst = HeadingAccEst;
+      sensor.headVeh = headVeh;
+      sensor.magDec = magDec;
+      sensor.magAcc = magAcc;
+
 
       gnss->flushPVT();
     }
@@ -132,7 +194,7 @@ void setup() {
   digitalWrite(LED_YELLOW, HIGH);
 
 
-   delay(1000);  // Wait for Serial to become available.
+  delay(1000);  // Wait for Serial to become available.
   Serial.println("Starting surfsense");
   pinMode(PRESSURE_SENSOR_PIN, INPUT);
 
@@ -165,7 +227,23 @@ void setup() {
   myGNSS.setI2COutput(COM_TYPE_UBX);  //Set the I2C port to output both NMEA and UBX messages
   //myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);  //Save (only) the communications port settings to flash and BBR
 
-  myGNSS.setNavigationFrequency(5);
+  //measurement time (inms)
+  if (myGNSS.setMeasurementRate(60) == false) {
+    Serial.println(F("Could not set the measurement rate. Freezing."));
+    while (1)
+      ;
+  }
+
+  myGNSS.setI2CpollingWait(25);
+
+  //number of measurements to average to make a solution (higher is better quality position but takes more time for measurements to load)
+  if (myGNSS.setNavigationRate(5) == false) {
+    Serial.println(F("Could not set the navigation rate. Freezing."));
+    while (1)
+      ;
+  }
+
+  myGNSS.setAutoPVT(true);  //Tell the GNSS to "send" each solution
 
   byte rate = myGNSS.getNavigationFrequency();  //Get the update rate of this module
   Serial.print("Current update rate: ");
@@ -283,6 +361,7 @@ void loop() {
 
   if (measbutton.isPressed()) {
     Serial.println("Measbutton is pressed");
+    if (myFile) myFile.flush();
     if (myFile) myFile.close();
     if (!measuring_state) {
       digitalWrite(LED_RED, HIGH);
@@ -290,7 +369,13 @@ void loop() {
       String filename = "/trax_" + String(myGNSS.getYear()) + "_" + String(myGNSS.getMonth()) + "_" + String(myGNSS.getDay()) + "_" + String(myGNSS.getHour()) + "_" + String(myGNSS.getMinute()) + "_" + String(myGNSS.getSecond()) + "_#" + String(file_counter) + ".csv";
       myFile = SD.open(filename, FILE_WRITE);
       if (myFile) Serial.println("File opened for Writing");
-      myFile.println(F("timestamp,IMU-ticks,aX,aY,aZ,gX,gY,gZ,mX,mY,mZ,tX,GPS-ticks,lat,long,alt,siv,pressure-ticks,force1"));
+      myFile.println(F(
+        "timestamp,IMU-ticks,aX,aY,aZ,gX,gY,gZ,mX,mY,mZ,tX,"
+        "GPS-ticks,lat,long,alt,siv,"
+        "NedNorthVel,NedEastVel,NedDownVel,"
+        "VerticalAccEst,HorizontalAccEst,SpeedAccEst,HeadingAccEst,"
+        "headVeh,magDec,magAcc,"
+        "pressure-ticks,force1"));
       measuring_state = true;
     } else {
       digitalWrite(LED_RED, LOW);
