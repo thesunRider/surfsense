@@ -74,7 +74,7 @@ void save_data_tofile() {
     myFile.flush();  // this should be before writing so we can eliminate the possibility of waiting for any transfers to complete before the write happens
     myFile.printf(
       "%lu,%lu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.2f,%lu,%ld,%ld,%ld,%d,"
-      "%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d,%d,%lu,%d\n",
+      "%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d\n",
 
       millis(),
       sensor.time_imu,
@@ -87,7 +87,6 @@ void save_data_tofile() {
       sensor.longitude,
       sensor.altitude,
       sensor.siv,
-
       sensor.NedNorthVel,
       sensor.NedEastVel,
       sensor.NedDownVel,
@@ -98,7 +97,6 @@ void save_data_tofile() {
       sensor.headVeh,
       sensor.magDec,
       sensor.magAcc,
-
       sensor.time_pressure,
       sensor.force);
 
