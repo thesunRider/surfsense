@@ -66,8 +66,8 @@ void save_data_tofile() {
   // if the file opened okay, write to it:
   if (myFile) {
     String message = String(millis()) + "," + String(sensor.time_imu) + "," + String(sensor.accel_X) + "," + String(sensor.accel_Y) + "," + String(sensor.accel_Z) + "," + String(sensor.gyro_X) + "," + String(sensor.gyro_Y) + "," + String(sensor.gyro_Z) + "," + String(sensor.mag_X) + "," + String(sensor.mag_Y) + "," + String(sensor.mag_Z) + "," + String(sensor.temp) + "," + String(sensor.time_gps) + "," + String(sensor.latitude) + "," + String(sensor.longitude) + "," + String(sensor.altitude) + "," + String(sensor.siv) + "," + String(sensor.time_pressure) + "," + String(sensor.force);
-    myFile.println(message);
     myFile.flush();
+    myFile.println(message);
   }
   // if the file didn't open, print an error:
   else {
@@ -82,7 +82,7 @@ void getdata_GPS(void* pvParameters) {
   SFE_UBLOX_GNSS* gnss = static_cast<SFE_UBLOX_GNSS*>(pvParameters);
   while (1) {
 
-    if (measuring_state && (millis() - lastTime_GPS > (1000 / 5) ) && gnss->getPVT() ) {  //200 msec for GPS update
+    if (measuring_state && (millis() - lastTime_GPS > 200 ) && gnss->getPVT() ) {  //200 msec for GPS update
       lastTime_GPS = millis();                                                        //Update the timer
       latitude = gnss->getLatitude();
       longitude = gnss->getLongitude();
@@ -304,7 +304,7 @@ void loop() {
       setReports();
     }
 
-    if (millis() - lastTime_IMU > 10) {  //100 msec for IMU update
+    if (millis() - lastTime_IMU > 10) {  //10 msec for IMU update
       lastTime_IMU = millis();           //Update the timer
       getdata_IMU();
       sensor.force = analogRead(PRESSURE_SENSOR_PIN);
