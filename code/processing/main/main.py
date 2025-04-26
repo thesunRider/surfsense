@@ -2,7 +2,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-#check https://github.com/balamuruganky/EKF_IMU_GPS/tree/master
+
+
+
 
 data = pd.read_csv('test_data.csv')
 print(data.head()) # to display the first 5 lines of loaded data
@@ -40,3 +42,4 @@ cbar.set_label('GPS Ticks')
 plt.show()
 
 #, double vn,double ve,double vd,double lat,double lon,double alt,float p,float q,float r,float ax,float ay,float az,float hx,float hy, float hz
+
