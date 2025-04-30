@@ -37,5 +37,3 @@ cbar.set_label('GPS Ticks')
 
 plt.show()
 
-
-#, double vn,double ve,double vd, 
