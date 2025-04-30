@@ -2,9 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-
-
+#check https://github.com/balamuruganky/EKF_IMU_GPS/tree/master
 
 data = pd.read_csv('test_data.csv')
 print(data.head()) # to display the first 5 lines of loaded data
@@ -18,28 +16,26 @@ data['long'] = data['long'] / 1e7
 
 print(data)
 
-data.plot(x='GPS-ticks', y='lat', title='lat over Time', figsize=(10, 4))
-plt.xlabel("Timestamp (ms)")
-plt.ylabel("Latitude")
-plt.grid(True)
-plt.show()
 
-
-
-data.plot(x='GPS-ticks', y='long', title='lat over Time', figsize=(10, 4))
-plt.xlabel("Timestamp (ms)")
-plt.ylabel("Latitude")
-plt.grid(True)
-plt.show()
 
 colors = data['GPS-ticks']
-fig, ax = plt.subplots(figsize=(10, 6))
-sc = ax.scatter(data['lat'], data['long'], c=colors, cmap='viridis', s=10)
+fig, ax = plt.subplots(nrows=3, ncols=3,figsize=(10, 6))
+sc = ax[0,0].scatter(data['lat'], data['long'], c=colors, cmap='viridis', s=10)
+ax[0,1].scatter(data["IMU-ticks"], data['aX'],c=data["IMU-ticks"],cmap='viridis', s=10)
+ax[0,2].scatter(data["IMU-ticks"], data['aY'],c=data["IMU-ticks"],cmap='viridis', s=10)
+ax[1,0].scatter(data["IMU-ticks"], data['aZ'],c=data["IMU-ticks"],cmap='viridis', s=10)
+ax[1,1].scatter(data["IMU-ticks"], data['gX'],c=data["IMU-ticks"],cmap='viridis', s=10)
+ax[1,2].scatter(data["IMU-ticks"], data['gY'],c=data["IMU-ticks"],cmap='viridis', s=10)
+ax[2,0].scatter(data["IMU-ticks"], data['gZ'],c=data["IMU-ticks"],cmap='viridis', s=10)
+
+
+ax[2,1].scatter(data["IMU-ticks"], (data['aX']**2 + data['aX']**2 + data['aZ']**2)**(1/2),c=data["IMU-ticks"],cmap='viridis', s=10)
 
 # Add colorbar for reference
 cbar = plt.colorbar(sc, ax=ax)
 cbar.set_label('GPS Ticks')
+
 plt.show()
 
-#, double vn,double ve,double vd,double lat,double lon,double alt,float p,float q,float r,float ax,float ay,float az,float hx,float hy, float hz
 
+#, double vn,double ve,double vd, 
