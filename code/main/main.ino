@@ -4,6 +4,7 @@
 #include <ezButton.h>
 #include <SPI.h>
 #include <SD.h>
+#include <Adafruit_MMC56x3.h>
 
 //#define DEBUG_ON
 
@@ -29,6 +30,9 @@ struct sensor_data {
   long gps_xaccel;
   long gps_yaccel;
   long gps_zaccel;
+  float mag_EX;
+  float mag_EY;
+  float mag_EZ;
 
   long NedNorthVel, NedEastVel, NedDownVel, VerticalAccEst, HorizontalAccEst, SpeedAccEst, HeadingAccEst;
   int headVeh, magDec, magAcc;
@@ -63,6 +67,10 @@ bool measuring_state = false;
 
 #define SCK_CARD A5
 
+
+/* Assign a unique ID to this sensor at the same time */
+Adafruit_MMC5603 mmc = Adafruit_MMC5603(12345);
+
 ezButton calbutton(CALBUTTON);    // create ezButton object that attach to pin 7;
 ezButton measbutton(MEASBUTTON);  // create ezButton object that attach to pin 7;
 BNO08x myIMU;
@@ -74,7 +82,7 @@ void save_data_tofile() {
     myFile.flush();  // this should be before writing so we can eliminate the possibility of waiting for any transfers to complete before the write happens
     myFile.printf(
       "%lu,%lu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.2f,%lu,%ld,%ld,%ld,%d,"
-      "%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d\n",
+      "%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d,%.2f,%.2f,%.2f\n",
 
       millis(),
       sensor.time_imu,
@@ -98,7 +106,10 @@ void save_data_tofile() {
       sensor.magDec,
       sensor.magAcc,
       sensor.time_pressure,
-      sensor.force);
+      sensor.force,
+      sensor.mag_EX,
+      sensor.mag_EY,
+      sensor.mag_EZ);
 
     //myFile.println(message);
   }
@@ -222,6 +233,19 @@ void setup() {
       ;
   }
 
+  if (!mmc.begin(MMC56X3_DEFAULT_ADDRESS, &Wire)) {  // I2C mode
+    /* There was a problem detecting the MMC5603 ... check your connections */
+    Serial.println("Ooops, no MMC5603 detected ... Check your wiring!");
+    while (1) delay(10);
+  }
+
+
+  mmc.printSensorDetails();
+
+  mmc.setDataRate(100); // in Hz, from 1-255 or 1000
+  mmc.setContinuousMode(true);
+
+
   myGNSS.setI2COutput(COM_TYPE_UBX);  //Set the I2C port to output both NMEA and UBX messages
   //myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);  //Save (only) the communications port settings to flash and BBR
 
@@ -284,6 +308,12 @@ void getdata_IMU() {
       sensor.mag_Z = myIMU.getMagZ();
     }
   }
+  sensors_event_t event;
+  mmc.getEvent(&event);
+
+  sensor.mag_EX = event.magnetic.x;
+  sensor.mag_EY = event.magnetic.y;
+  sensor.mag_EZ = event.magnetic.z;
 }
 
 
@@ -373,7 +403,7 @@ void loop() {
         "NedNorthVel,NedEastVel,NedDownVel,"
         "VerticalAccEst,HorizontalAccEst,SpeedAccEst,HeadingAccEst,"
         "headVeh,magDec,magAcc,"
-        "pressure-ticks,force1"));
+        "pressure-ticks,force1,magEx,magEY,magEZ"));
       measuring_state = true;
     } else {
       digitalWrite(LED_RED, LOW);
