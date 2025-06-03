@@ -286,6 +286,8 @@ void setup() {
   mmc.setContinuousMode(true);
 
 
+//gps not working
+/**
   if (myGNSS.begin(Wire) == false) {
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
     return;
@@ -323,6 +325,7 @@ void setup() {
     NULL,           // Task handle
     0               // Core
   );
+  **/
 
   delay(500);
   digitalWrite(LED_RED, LOW);
