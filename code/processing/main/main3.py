@@ -6,6 +6,8 @@ import ahrs
 from ahrs.common.orientation import q2R
 import os
 
+import imufusion
+
 
 def list_csv_files(directory):
     csv_files = []
@@ -36,7 +38,7 @@ print(data)
 
 
 colors = data['GPS-ticks']
-fig, ax = plt.subplots(nrows=4, ncols=3,figsize=(10, 6))
+fig, ax = plt.subplots(nrows=3, ncols=3,figsize=(10, 6))
 sc = ax[0,0].scatter(data['lat'], data['long'], c=colors, cmap='viridis', s=10)
 ax[0,0].set_title("lat vs long")
 
@@ -64,12 +66,6 @@ ax[2,1].set_title("mX")
 ax[2,2].scatter(data["IMU-ticks"],data['mY'] ,c=data["IMU-ticks"],cmap='viridis', s=10)
 ax[2,2].set_title("mY")
 
-ax[3,0].scatter(data["IMU-ticks"],data['mZ'] ,c=data["IMU-ticks"],cmap='viridis', s=10)
-ax[3,0].set_title("mZ")
-
-ax[3,1].scatter(data["IMU-ticks"],( (data['mX'])**2 +  (data['mY'])**2 + data['mZ']**2)**0.5,c=data["IMU-ticks"],cmap='viridis', s=10)
-ax[3,1].set_title("mTotal")
-
 # Add colorbar for reference
 cbar = plt.colorbar(sc, ax=ax)
 cbar.set_label('GPS Ticks')
@@ -86,22 +82,24 @@ ts = data['IMU-ticks'].to_numpy()
 dt = np.diff(ts) / 1000.0  # Convert ms to seconds
 dt = np.append(dt, dt[-1])  # Same length as data
 
-# Run AHRS filter
+# Process sensor data
+ahrs = imufusion.Ahrs()
+euler = np.empty((len(dt), 3))
 
-quat = Quaternion([1, 0, 0, 0.1])
-print("Avg dt:",np.average(dt),"Quat:",quat)
-attitude = ahrs.filters.EKF(acc=acc, gyr=gyr,mag=mag,Dt=np.average(dt))
-quaternions = attitude.Q
+for index in range(len(dt)):
+    ahrs.update_no_magnetometer(gyr[index], acc[index], np.mean(dt))  # 100 Hz sample rate
+    euler[index] = ahrs.quaternion.to_euler()
 
+print(euler)
 
+breakpoint()
 
 # Remove gravity to get linear acceleration in world frame
 positions = [np.zeros(3)]
 velocities = [np.zeros(3)]
 
 for i in range(1, len(acc)):
-    R = q2R(quaternions[i])      # Rotation matrix from body to world
-    lin_acc = R @ acc[i]         # Rotate to world frame
+    lin_acc =  euler[i] acc[i]         # Rotate to world frame
     lin_acc -= [0, 0, 9.81]      # Remove gravity
 
     v = velocities[-1] + lin_acc * dt[i]
@@ -120,3 +118,4 @@ ax.set_xlabel("X (m)")
 ax.set_ylabel("Y (m)")
 ax.set_zlabel("Z (m)")
 plt.show()
+

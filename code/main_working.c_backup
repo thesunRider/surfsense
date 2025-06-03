@@ -1,11 +1,10 @@
-#include <Wire.h>  //Needed for I2C to GNSS
+#include <Wire.h>                             //Needed for I2C to GNSS
+#include "SparkFun_BNO08x_Arduino_Library.h"  // Click here to get the library: http://librarymanager/All#SparkFun_BNO080
 #include <Preferences.h>
 #include <ezButton.h>
 #include <SPI.h>
 #include <SD.h>
-#include <Adafruit_BNO08x.h>
 #include <Adafruit_MMC56x3.h>
-#include <SparkFun_u-blox_GNSS_Arduino_Library.h>  //Click here to get the library: http://librarymanager/All#SparkFun_u-blox_GNSS
 
 #define DEBUG_ON
 
@@ -48,8 +47,7 @@ File myFile;
 sensor_data sensor;
 Preferences preferences;
 
-sh2_SensorValue_t sensorValue;
-sensors_event_t mag_event;
+#include <SparkFun_u-blox_GNSS_Arduino_Library.h>  //Click here to get the library: http://librarymanager/All#SparkFun_u-blox_GNSS
 SFE_UBLOX_GNSS myGNSS;
 unsigned int file_counter = 0;
 bool measuring_state = false;
@@ -57,6 +55,7 @@ bool measuring_state = false;
 #define PRESSURE_SENSOR_PIN A0
 #define BNO08X_INT 9
 #define BNO08X_RST 12
+
 
 #define BNO08X_ADDR 0x4A
 #define SCL_EXTRA 6
@@ -68,80 +67,13 @@ bool measuring_state = false;
 
 #define SCK_CARD A5
 
-Adafruit_BNO08x bno08x(BNO08X_RST);
 
 /* Assign a unique ID to this sensor at the same time */
-Adafruit_MMC5603 mmc = Adafruit_MMC5603(127);
+Adafruit_MMC5603 mmc = Adafruit_MMC5603(12345);
 
 ezButton calbutton(CALBUTTON);    // create ezButton object that attach to pin 7;
 ezButton measbutton(MEASBUTTON);  // create ezButton object that attach to pin 7;
-
-
-// Hard-iron calibration settings
-const float hard_iron[3] = {
-  -32.34, -1.19, 6.25
-};
-
-// Soft-iron calibration settings
-const float soft_iron[3][3] = {
-  { 0.993, 0.040, -0.002 },
-  { 0.040, 1.003, -0.009 },
-  { -0.002, -0.009, 1.006 }
-};
-
-// Magnetic declination from magnetic-declination.com
-// East is positive ( ), west is negative (-)
-// mag_decl = ( /-)(deg   min/60   sec/3600)
-// Set to 0 to get magnetic heading instead of geo heading
-const float mag_decl = -1.233;
-
-//calibration values from CALC: https://www.digikey.com/en/maker/projects/how-to-calibrate-a-magnetometer/50f6bc8f36454a03b664dca30cf33a8b
-void get_calibrated_mag_values() {
-  static float hi_cal[3];
-  static float heading = 0;
-
-  float mag_data[] = { sensor.mag_EX,
-                       sensor.mag_EY,
-                       sensor.mag_EZ };
-
-  for (uint8_t i = 0; i < 3; i++) {
-    hi_cal[i] = mag_data[i] - hard_iron[i];
-  }
-
-  // Apply soft-iron scaling
-  for (uint8_t i = 0; i < 3; i++) {
-    mag_data[i] = (soft_iron[i][0] * hi_cal[0])*(soft_iron[i][1] * hi_cal[1])*(soft_iron[i][2] * hi_cal[2]);
-  }
-
-  sensor.mag_EX = mag_data[0];
-  sensor.mag_EY = mag_data[1];
-  sensor.mag_EZ = mag_data[2];
-
-  // Calculate angle for heading, assuming board is parallel to
-  // the ground and  Y points toward heading.
-  heading = -1 * (atan2(mag_data[0], mag_data[1]) * 180) / M_PI;
-
-  // Apply magnetic declination to convert magnetic heading
-  // to geographic heading
-  heading = mag_decl;
-
-  // Convert heading to 0..360 degrees
-  if (heading < 0) {
-    heading = 360;
-  }
-}
-
-void setReports(void) {
-  Serial.println("Setting desired reports");
-  if (!bno08x.enableReport(SH2_ACCELEROMETER))
-    Serial.println("Could not enable accelerometer");
-
-  if (!bno08x.enableReport(SH2_GYROSCOPE_CALIBRATED))
-    Serial.println("Could not enable gyroscope");
-
-  if (!bno08x.enableReport(SH2_MAGNETIC_FIELD_CALIBRATED))
-    Serial.println("Could not enable magnetic field calibrated");
-}
+BNO08x myIMU;
 
 void save_data_tofile() {
   // if the file opened okay, write to it:
@@ -149,7 +81,7 @@ void save_data_tofile() {
     //String message = String(millis()) + "," + String(sensor.time_imu) + "," + String(sensor.accel_X) + "," + String(sensor.accel_Y) + "," + String(sensor.accel_Z) + "," + String(sensor.gyro_X) + "," + String(sensor.gyro_Y) + "," + String(sensor.gyro_Z) + "," + String(sensor.mag_X) + "," + String(sensor.mag_Y) + "," + String(sensor.mag_Z) + "," + String(sensor.temp) + "," + String(sensor.time_gps) + "," + String(sensor.latitude) + "," + String(sensor.longitude) + "," + String(sensor.altitude) + "," + String(sensor.siv) + "," + String(sensor.time_pressure) + "," + String(sensor.force);
     myFile.flush();  // this should be before writing so we can eliminate the possibility of waiting for any transfers to complete before the write happens
     myFile.printf(
-      "%lu,%lu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%ld,%lu,%ld,%ld,%ld,%d,"
+      "%lu,%lu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.2f,%lu,%ld,%ld,%ld,%d,"
       "%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d,%.2f,%.2f,%.2f\n",
 
       millis(),
@@ -195,62 +127,85 @@ void getdata_GPS(void* pvParameters) {
   SFE_UBLOX_GNSS* gnss = static_cast<SFE_UBLOX_GNSS*>(pvParameters);
   while (1) {
 
-    if (measuring_state) {      //200 msec for GPS update
-      lastTime_GPS = millis();  //Update the timer
-      if (gnss->getPVT() && (gnss->getInvalidLlh() == false)) {
-        latitude = gnss->getLatitude();
-        longitude = gnss->getLongitude();
-        altitude = gnss->getAltitude();
-        SIV = gnss->getSIV();
-        NedNorthVel = gnss->getNedNorthVel();
-        NedEastVel = gnss->getNedEastVel();
-        NedDownVel = gnss->getNedDownVel();
-        VerticalAccEst = gnss->getVerticalAccEst();
-        HorizontalAccEst = gnss->getHorizontalAccEst();
-        SpeedAccEst = gnss->getSpeedAccEst();
-        HeadingAccEst = gnss->getHeadingAccEst();
+    if (measuring_state && gnss->getPVT() && (gnss->getInvalidLlh() == false)) {  //200 msec for GPS update
+      lastTime_GPS = millis();                                                    //Update the timer
+      latitude = gnss->getLatitude();
+      longitude = gnss->getLongitude();
+      altitude = gnss->getAltitude();
+      SIV = gnss->getSIV();
+      NedNorthVel = gnss->getNedNorthVel();
+      NedEastVel = gnss->getNedEastVel();
+      NedDownVel = gnss->getNedDownVel();
+      VerticalAccEst = gnss->getVerticalAccEst();
+      HorizontalAccEst = gnss->getHorizontalAccEst();
+      SpeedAccEst = gnss->getSpeedAccEst();
+      HeadingAccEst = gnss->getHeadingAccEst();
 
-        if (gnss->getHeadVehValid() == true) {
-          headVeh = gnss->getHeadVeh();
-          magDec = gnss->getMagDec();
-          magAcc = gnss->getMagAcc();
-        }
-
-        sensor.time_gps = millis();
-
-        sensor.latitude = latitude;
-        sensor.longitude = longitude;
-        sensor.altitude = altitude;
-        sensor.siv = SIV;
-
-        sensor.NedNorthVel = NedNorthVel;
-        sensor.NedEastVel = NedEastVel;
-        sensor.NedDownVel = NedDownVel;
-        sensor.VerticalAccEst = VerticalAccEst;
-        sensor.HorizontalAccEst = HorizontalAccEst;
-        sensor.SpeedAccEst = SpeedAccEst;
-        sensor.HeadingAccEst = HeadingAccEst;
-        sensor.headVeh = headVeh;
-        sensor.magDec = magDec;
-        sensor.magAcc = magAcc;
-
-        gnss->flushPVT();
+      if (gnss->getHeadVehValid() == true) {
+        headVeh = gnss->getHeadVeh();
+        magDec = gnss->getMagDec();
+        magAcc = gnss->getMagAcc();
       }
+
+      sensor.time_gps = millis();
+
+      sensor.latitude = latitude;
+      sensor.longitude = longitude;
+      sensor.altitude = altitude;
+      sensor.siv = SIV;
+
+      sensor.NedNorthVel = NedNorthVel;
+      sensor.NedEastVel = NedEastVel;
+      sensor.NedDownVel = NedDownVel;
+      sensor.VerticalAccEst = VerticalAccEst;
+      sensor.HorizontalAccEst = HorizontalAccEst;
+      sensor.SpeedAccEst = SpeedAccEst;
+      sensor.HeadingAccEst = HeadingAccEst;
+      sensor.headVeh = headVeh;
+      sensor.magDec = magDec;
+      sensor.magAcc = magAcc;
+
+
+      gnss->flushPVT();
     }
     delay(10);
   }
 }
 
+void setReports(void) {
+  Serial.println("Setting desired reports");
+  if (myIMU.enableMagnetometer() == true) {
+    Serial.println(F("Magnetometer enabled"));
+  } else {
+    Serial.println("Could not enable magnetometer");
+  }
+
+  if (myIMU.enableAccelerometer() == true) {
+    Serial.println(F("Accelerometer enabled"));
+  } else {
+    Serial.println("Could not enable Accelerometer");
+  }
+
+  if (myIMU.enableGyro() == true) {
+    Serial.println(F("Gyro enabled"));
+  } else {
+    Serial.println("Could not enable Gyro");
+  }
+}
+
 void setup() {
   Serial.begin(115200);
-  delay(5000);
-
+  #ifdef DEBUG_ON
+  while (Serial.available())
+    delay(10);
+  #endif
   preferences.begin("trax", false);
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_YELLOW, OUTPUT);
 
   digitalWrite(LED_RED, HIGH);
   digitalWrite(LED_YELLOW, HIGH);
+
 
   delay(1000);  // Wait for Serial to become available.
   Serial.println("Starting surfsense");
@@ -266,30 +221,34 @@ void setup() {
     return;
   }
 
-  if (!bno08x.begin_I2C(BNO08X_ADDR, &Wire1, 178)) {
-    Serial.println("Failed to find BNO08x chip");
-    return;
-  }
 
+  if (myIMU.begin(BNO08X_ADDR, Wire1, BNO08X_INT, BNO08X_RST) == false) {
+    Serial.println("BNO08x not detected at default I2C address. Check your jumpers and the hookup guide. Freezing...");
+    while (1)
+      ;
+  }
   Serial.println("BNO08x found!");
+
   setReports();
+
+  if (myGNSS.begin(Wire) == false) {
+    Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
+    while (1)
+      ;
+  }
 
   if (!mmc.begin(MMC56X3_DEFAULT_ADDRESS, &Wire)) {  // I2C mode
     /* There was a problem detecting the MMC5603 ... check your connections */
     Serial.println("Ooops, no MMC5603 detected ... Check your wiring!");
-    return;
+    while (1) delay(10);
   }
 
 
   mmc.printSensorDetails();
+
   mmc.setDataRate(100);  // in Hz, from 1-255 or 1000
   mmc.setContinuousMode(true);
 
-
-  if (myGNSS.begin(Wire) == false) {
-    Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
-    return;
-  }
 
   myGNSS.setI2COutput(COM_TYPE_UBX);  //Set the I2C port to output both NMEA and UBX messages
   //myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);  //Save (only) the communications port settings to flash and BBR
@@ -297,7 +256,8 @@ void setup() {
   //measurement time (inms)
   if (myGNSS.setMeasurementRate(60) == false) {
     Serial.println(F("Could not set the measurement rate. Freezing."));
-    return;
+    while (1)
+      ;
   }
 
   myGNSS.setI2CpollingWait(25);
@@ -305,7 +265,8 @@ void setup() {
   //number of measurements to average to make a solution (higher is better quality position but takes more time for measurements to load)
   if (myGNSS.setNavigationRate(5) == false) {
     Serial.println(F("Could not set the navigation rate. Freezing."));
-    return;
+    while (1)
+      ;
   }
 
   myGNSS.setAutoPVT(true);  //Tell the GNSS to "send" each solution
@@ -330,34 +291,33 @@ void setup() {
 }
 
 void getdata_IMU() {
-  if (bno08x.getSensorEvent(&sensorValue)) {
+  if (myIMU.getSensorEvent() == true) {
     sensor.time_imu = millis();
-    if (sensorValue.sensorId == SH2_GYROSCOPE_CALIBRATED) {
-      sensor.gyro_X = sensorValue.un.gyroscope.x;
-      sensor.gyro_Y = sensorValue.un.gyroscope.y;
-      sensor.gyro_Z = sensorValue.un.gyroscope.z;
+
+    if (myIMU.getSensorEventID() == SENSOR_REPORTID_GYROSCOPE_CALIBRATED) {
+      sensor.gyro_X = myIMU.getGyroX();
+      sensor.gyro_Y = myIMU.getGyroY();
+      sensor.gyro_Z = myIMU.getGyroZ();
     }
 
-    if (sensorValue.sensorId == SH2_ACCELEROMETER) {
-      sensor.accel_X = sensorValue.un.accelerometer.x;
-      sensor.accel_Y = sensorValue.un.accelerometer.y;
-      sensor.accel_Z = sensorValue.un.accelerometer.z;
+    if (myIMU.getSensorEventID() == SENSOR_REPORTID_ACCELEROMETER) {
+      sensor.accel_X = myIMU.getAccelX();
+      sensor.accel_Y = myIMU.getAccelY();
+      sensor.accel_Z = myIMU.getAccelZ();
     }
 
-    if (sensorValue.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) {
-      sensor.mag_X = sensorValue.un.magneticField.x;
-      sensor.mag_Y = sensorValue.un.magneticField.y;
-      sensor.mag_Z = sensorValue.un.magneticField.z;
+    if (myIMU.getSensorEventID() == SENSOR_REPORTID_MAGNETIC_FIELD) {
+      sensor.mag_X = myIMU.getMagX();
+      sensor.mag_Y = myIMU.getMagY();
+      sensor.mag_Z = myIMU.getMagZ();
     }
   }
+  sensors_event_t event;
+  mmc.getEvent(&event);
 
-  mmc.getEvent(&mag_event);
-
-  sensor.mag_EX = mag_event.magnetic.x;
-  sensor.mag_EY = mag_event.magnetic.y;
-  sensor.mag_EZ = mag_event.magnetic.z;
-
-  get_calibrated_mag_values();
+  sensor.mag_EX = event.magnetic.x;
+  sensor.mag_EY = event.magnetic.y;
+  sensor.mag_EZ = event.magnetic.z;
 }
 
 
@@ -417,37 +377,23 @@ void loop() {
   calbutton.loop();
   measbutton.loop();
 
-
-
   if (calbutton.isPressed()) {
     digitalWrite(LED_YELLOW, HIGH);
     Serial.println("Calbutton is pressed");
-    //write calibration code here
-    if (myFile) myFile.flush();
-    if (myFile) myFile.close();
-
-    String filename = "/trax_calib_#" + String(file_counter) + ".csv";
-    myFile = SD.open(filename, FILE_WRITE);
-    if (myFile) Serial.println("File opened for Writing");
-    myFile.println(F(
-      "timestamp,IMU-ticks,aX,aY,aZ,gX,gY,gZ,mX,mY,mZ,tX,"
-      "GPS-ticks,lat,long,alt,siv,"
-      "NedNorthVel,NedEastVel,NedDownVel,"
-      "VerticalAccEst,HorizontalAccEst,SpeedAccEst,HeadingAccEst,"
-      "headVeh,magDec,magAcc,"
-      "pressure-ticks,force1,magEx,magEY,magEZ"));
-    measuring_state = true;
-
-
-    for (int i = 0; i < 100; i++) {
-      getdata_IMU();
-      sensor.force = analogRead(PRESSURE_SENSOR_PIN);
-      sensor.time_pressure = millis();
-      save_data_tofile();
-      delay(100);
+    if (myIMU.setCalibrationConfig(SH2_CAL_ACCEL || SH2_CAL_GYRO || SH2_CAL_MAG) == true) {
+      Serial.println(F("Calibration Command Sent Successfully"));
+    } else {
+      Serial.println(F("Could not send Calibration Command. Freezing..."));
+      while (1) delay(10);
+    }
+    //wait 10 seconds and save calibrated data to bno085 flash
+    delay(10000);
+    if (myIMU.saveCalibration() == true) {
+      Serial.println(F("Calibration data was saved successfully"));
+    } else {
+      Serial.println("Save Calibration Failure");
     }
 
-    //wait 10 seconds and save calibrated data to bno085 flash
     digitalWrite(LED_YELLOW, LOW);
   }
 
@@ -476,8 +422,8 @@ void loop() {
   }
 
   if (measuring_state) {
-    if (bno08x.wasReset()) {
-      Serial.print("sensor was reset ");
+    if (myIMU.wasReset()) {
+      Serial.print("Sensor was reset");
       setReports();
     }
 
@@ -487,7 +433,6 @@ void loop() {
       sensor.force = analogRead(PRESSURE_SENSOR_PIN);
       sensor.time_pressure = millis();
       save_data_tofile();
-
 #ifdef DEBUG_ON
       displaysensor_data();
 #endif
